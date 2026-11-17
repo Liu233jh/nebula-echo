@@ -230,8 +230,14 @@ def chat():
 
     def gen():
         in_tok, out_tok = 0, 0
-        for line in r.iter_lines(decode_unicode=True):
-            if not line or not line.startswith("data:"): continue
+        # 必须按字节迭代再手动 utf-8 解码：decode_unicode=True 会猜成
+        # ISO-8859-1，把中文切成乱码（ç¨æ· = 用户）
+        for raw in r.iter_lines():
+            if not raw:
+                continue
+            line = raw.decode("utf-8", "ignore") if isinstance(raw, bytes) else raw
+            if not line.startswith("data:"):
+                continue
             payload = line[5:].strip()
             if payload == "[DONE]":
                 yield "data: [DONE]\n\n"
@@ -241,7 +247,8 @@ def chat():
             try:
                 j = json.loads(payload)
             except Exception:
-                yield line + "\n\n"; continue
+                yield "data: " + json.dumps({"_raw": line[:200]}) + "\n\n"
+                continue
             u = j.get("usage")
             if u:
                 in_tok = u.get("prompt_tokens", in_tok)
